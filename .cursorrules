@@ -1,0 +1,384 @@
+# Cursor Rules for httpclient
+
+This Go HTTP client project follows three core principles:
+1. **Negative Space Programming** - Define what must NOT happen; valid behavior emerges from the remaining space
+2. **Power of Ten Rules** - NASA/JPL safety-critical coding adapted for Go
+3. **Idiomatic Go** - Clear, simple, explicit code following Go conventions
+
+---
+
+## Negative Space Programming
+
+Negative space programming means explicitly handling all invalid states first. The "happy path" is what remains after eliminating everything that shouldn't happen.
+
+### Guard Clauses First
+```go
+// ✓ Correct: Eliminate invalid cases immediately
+func ProcessRequest(req *Request) (*Response, error) {
+    if req == nil {
+        return nil, errors.New("request cannot be nil")
+    }
+    if req.URL == "" {
+        return nil, errors.New("URL cannot be empty")
+    }
+    if req.Timeout <= 0 {
+        return nil, errors.New("timeout must be positive")
+    }
+    
+    // Happy path emerges naturally
+    return doRequest(req)
+}
+
+// ✗ Wrong: Happy path buried in conditionals
+func ProcessRequest(req *Request) (*Response, error) {
+    if req != nil {
+        if req.URL != "" {
+            if req.Timeout > 0 {
+                return doRequest(req)
+            }
+        }
+    }
+    return nil, errors.New("invalid request")
+}
+```
+
+### Define Boundaries, Not Behaviors
+- Validate all inputs at system boundaries
+- Reject invalid states immediately with clear error messages
+- Never allow invalid data to propagate deeper into the system
+- Return early on any error condition
+
+### Error Messages Must Be Actionable
+```go
+// ✓ Correct: Actionable error
+return nil, fmt.Errorf("timeout %v exceeds maximum allowed %v", timeout, maxTimeout)
+
+// ✗ Wrong: Vague error
+return nil, errors.New("invalid timeout")
+```
+
+---
+
+## Power of Ten Rules (Adapted for Go)
+
+Based on NASA/JPL's safety-critical coding guidelines by Gerard J. Holzmann.
+
+### Rule 1: Simple Control Flow
+- **No goto statements**
+- **No recursion** - Use iteration with explicit bounds instead
+- Prefer early returns over deep nesting
+- Maximum nesting depth: 3 levels
+
+```go
+// ✓ Correct: Iterative with bounds
+func FindItem(items []Item, id string, maxIterations int) (*Item, error) {
+    iterations := 0
+    for i := range items {
+        iterations++
+        if iterations > maxIterations {
+            return nil, errors.New("iteration limit exceeded")
+        }
+        if items[i].ID == id {
+            return &items[i], nil
+        }
+    }
+    return nil, ErrNotFound
+}
+
+// ✗ Wrong: Recursive
+func FindItem(items []Item, id string) *Item {
+    if len(items) == 0 {
+        return nil
+    }
+    if items[0].ID == id {
+        return &items[0]
+    }
+    return FindItem(items[1:], id) // Unbounded recursion
+}
+```
+
+### Rule 2: All Loops Must Have Fixed Upper Bounds
+- Every loop must have a provable maximum iteration count
+- Use explicit iteration limits for potentially unbounded operations
+- Timeouts are mandatory for any network or I/O operation
+
+```go
+const (
+    MaxRetries     = 5
+    MaxRedirects   = 10
+    MaxBodySize    = 10 * 1024 * 1024 // 10MB
+)
+
+func RetryRequest(req *Request) (*Response, error) {
+    for attempt := 0; attempt < MaxRetries; attempt++ {
+        resp, err := doRequest(req)
+        if err == nil {
+            return resp, nil
+        }
+        if !isRetryable(err) {
+            return nil, err
+        }
+    }
+    return nil, errors.New("max retries exceeded")
+}
+```
+
+### Rule 3: No Dynamic Memory Allocation After Initialization
+- Pre-allocate buffers and pools during initialization
+- Use sync.Pool for frequently allocated objects
+- Specify capacity hints for slices and maps
+
+```go
+// ✓ Correct: Pre-allocated with known capacity
+buffer := make([]byte, 0, expectedSize)
+
+// ✓ Correct: Pool for reuse
+var bufferPool = sync.Pool{
+    New: func() interface{} {
+        return make([]byte, 4096)
+    },
+}
+```
+
+### Rule 4: Functions Must Be Short
+- Maximum 60 lines of code per function
+- Each function should do one thing well
+- If a function is getting long, extract sub-functions
+
+### Rule 5: Assert Invariants
+- Validate preconditions at function entry
+- Validate postconditions before return
+- Use explicit checks, not panic for recoverable errors
+
+```go
+func SetTimeout(d time.Duration) error {
+    // Precondition assertions
+    if d <= 0 {
+        return errors.New("timeout must be positive")
+    }
+    if d > maxTimeout {
+        return fmt.Errorf("timeout %v exceeds maximum %v", d, maxTimeout)
+    }
+    
+    // Operation
+    c.timeout = d
+    return nil
+}
+```
+
+### Rule 6: Smallest Possible Scope
+- Declare variables as close to usage as possible
+- Prefer short-lived variables
+- Avoid package-level variables except for true constants
+- Place `defer` statements immediately after the resource allocation
+
+```go
+// ✓ Correct: Scoped to usage
+for _, item := range items {
+    result := process(item) // result only exists in loop
+    send(result)
+}
+
+// ✗ Wrong: Broader scope than needed
+var result Result
+for _, item := range items {
+    result = process(item)
+    send(result)
+}
+```
+
+### Rule 7: Check All Return Values
+- **Every error must be checked**
+- **Never use `_` to discard errors**
+- Document explicitly if an error is intentionally ignored (rare)
+
+```go
+// ✓ Correct: All errors checked
+resp, err := client.Do(req)
+if err != nil {
+    return nil, fmt.Errorf("request failed: %w", err)
+}
+defer func() {
+    if closeErr := resp.Body.Close(); closeErr != nil {
+        log.Printf("failed to close response body: %v", closeErr)
+    }
+}()
+
+// ✗ Wrong: Discarded error
+resp, _ := client.Do(req)
+```
+
+### Rule 8: Minimize Indirection
+- Maximum one level of pointer indirection
+- Avoid pointer-to-pointer
+- Avoid pointers to interfaces (`*MyInterface`) — interfaces are already reference types
+- Prefer value receivers unless mutation is required
+
+### Rule 9: Use Static Analysis
+- Run `go vet` on all code
+- Run `staticcheck` on all code
+- Run `golangci-lint` with strict configuration
+- Zero warnings policy
+
+---
+
+## Idiomatic Go Principles
+
+### Accept Interfaces, Return Structs
+```go
+// ✓ Correct
+func NewClient(transport http.RoundTripper) *Client {
+    return &Client{transport: transport}
+}
+
+// ✗ Wrong
+func NewClient(transport *http.Transport) ClientInterface {
+    return &Client{transport: transport}
+}
+```
+
+### Small Interfaces
+```go
+// ✓ Correct: Single-method interface
+type Doer interface {
+    Do(*http.Request) (*http.Response, error)
+}
+
+// ✗ Wrong: Kitchen sink interface
+type HTTPClient interface {
+    Get(url string) (*Response, error)
+    Post(url string, body io.Reader) (*Response, error)
+    Put(url string, body io.Reader) (*Response, error)
+    Delete(url string) (*Response, error)
+    // ... 20 more methods
+}
+```
+
+### Error Wrapping with Context
+```go
+// ✓ Correct: Wrapped with context
+if err != nil {
+    return fmt.Errorf("failed to parse response from %s: %w", url, err)
+}
+
+// ✗ Wrong: Context lost
+if err != nil {
+    return err
+}
+```
+
+### Context for Cancellation and Timeouts
+- All operations that can block must accept a context.Context
+- Context should be the first parameter
+- Never store context in a struct
+- Never use `context.Background()` or `context.TODO()` in production code (tests/main only)
+
+```go
+func (c *Client) Do(ctx context.Context, req *Request) (*Response, error) {
+    if ctx == nil {
+        return nil, errors.New("context cannot be nil")
+    }
+    
+    select {
+    case <-ctx.Done():
+        return nil, ctx.Err()
+    default:
+    }
+    
+    // ... proceed with request
+}
+```
+
+### Meaningful Names
+- Package names: short, lowercase, no underscores
+- Variable names: short for small scope, descriptive for larger scope
+- Avoid stuttering: `http.Client` not `http.HTTPClient`
+
+### Table-Driven Tests
+```go
+func TestParseURL(t *testing.T) {
+    tests := []struct {
+        name    string
+        input   string
+        want    *URL
+        wantErr bool
+    }{
+        {
+            name:    "valid http url",
+            input:   "http://example.com",
+            want:    &URL{Scheme: "http", Host: "example.com"},
+            wantErr: false,
+        },
+        {
+            name:    "empty url",
+            input:   "",
+            want:    nil,
+            wantErr: true,
+        },
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            got, err := ParseURL(tt.input)
+            if (err != nil) != tt.wantErr {
+                t.Errorf("ParseURL() error = %v, wantErr %v", err, tt.wantErr)
+                return
+            }
+            if !reflect.DeepEqual(got, tt.want) {
+                t.Errorf("ParseURL() = %v, want %v", got, tt.want)
+            }
+        })
+    }
+}
+```
+
+---
+
+## Fuzz Testing & Long-Running Simulation
+
+This project uses fuzz testing and property-based testing to simulate many HTTP requests over extended periods to uncover edge cases, race conditions, and implementation bugs.
+
+### Required Package
+
+**rapid** (`pgregory.net/rapid`) — Property-based testing with automatic shrinking and deterministic replay. Use for generating random but valid inputs, long-running simulations, and verifying invariants across thousands of test cases.
+
+### Fuzz Testing Rules
+
+- All public functions that accept external input must have corresponding fuzz tests
+- Use Go's native fuzzing (`testing.F`) for crash detection
+- Use `rapid` for property-based testing and invariant verification
+- Seed fuzz corpus with valid inputs, edge cases, and known problematic inputs
+- Fuzz tests must run with `-race` flag in CI
+
+### Long-Running Simulation Rules
+
+- Stability tests must run for minimum 10 minutes with `-timeout` flag
+- Use bounded concurrency (max 50 goroutines)
+- All simulations must have explicit upper bounds on iterations (Power of Ten Rule 2)
+- Track success/error rates and assert acceptable thresholds
+- Use `httptest.Server` for deterministic, isolated testing
+
+### Chaos Testing Rules
+
+- Inject random latency (10ms–500ms range)
+- Inject random failures (connection reset, refused, timeout)
+- Configurable failure rate (default 10%)
+- Client must never panic under chaos conditions
+- Client must always return either a valid response or an error
+
+### Invariants to Verify
+
+1. **No panics** — Function must never panic on any input
+2. **Consistent errors** — Invalid input must return an error
+3. **Resource cleanup** — All resources must be released
+4. **Bounded memory** — Memory usage must not grow unboundedly
+5. **Bounded time** — Operations must complete within timeout
+
+### Fuzz Test Requirements Checklist
+
+- [ ] All parsing functions have fuzz tests
+- [ ] All public API functions have property-based tests using `rapid`
+- [ ] Stability tests run for minimum 10 minutes
+- [ ] Chaos tests cover: timeouts, connection resets, partial responses
+- [ ] CI runs fuzz tests daily
+- [ ] All discovered crashers are fixed and added to corpus
