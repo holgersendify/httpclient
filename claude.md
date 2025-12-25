@@ -391,3 +391,10 @@ func TestReplayFailure(t *testing.T) {
 | Recursion | Forbidden |
 | Discarding errors | Forbidden |
 | goto | Forbidden |
+
+---
+
+## Git Conventions
+
+- Do not include Co-Authored-By or author attribution in commits
+- Keep commit messages concise and focused on the "why"
