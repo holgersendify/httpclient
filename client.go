@@ -2,10 +2,14 @@
 package httpclient
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
 	"net/url"
 	"time"
+
+	"sendify/httpclient/internal"
 )
 
 // Version is the current version of the httpclient package.
@@ -127,5 +131,110 @@ func WithDefaultContentType(contentType string) ClientOption {
 		}
 		c.defaultContentType = contentType
 		return nil
+	}
+}
+
+// Get performs an HTTP GET request.
+func (c *Client) Get(ctx context.Context, path string, result any) (*Response, error) {
+	return c.do(ctx, http.MethodGet, path, nil, result)
+}
+
+// Post performs an HTTP POST request.
+func (c *Client) Post(ctx context.Context, path string, body any, result any) (*Response, error) {
+	return c.do(ctx, http.MethodPost, path, body, result)
+}
+
+// Put performs an HTTP PUT request.
+func (c *Client) Put(ctx context.Context, path string, body any, result any) (*Response, error) {
+	return c.do(ctx, http.MethodPut, path, body, result)
+}
+
+// Patch performs an HTTP PATCH request.
+func (c *Client) Patch(ctx context.Context, path string, body any, result any) (*Response, error) {
+	return c.do(ctx, http.MethodPatch, path, body, result)
+}
+
+// Delete performs an HTTP DELETE request.
+func (c *Client) Delete(ctx context.Context, path string, result any) (*Response, error) {
+	return c.do(ctx, http.MethodDelete, path, nil, result)
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body any, result any) (*Response, error) {
+	reqURL := c.baseURL.JoinPath(path)
+
+	bodyReader, contentType, err := internal.EncodeBody(body)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, reqURL.String(), bodyReader)
+	if err != nil {
+		return nil, err
+	}
+
+	for key, values := range c.headers {
+		for _, value := range values {
+			req.Header.Add(key, value)
+		}
+	}
+
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	} else if body != nil {
+		req.Header.Set("Content-Type", c.defaultContentType)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, c.wrapError(err, method, reqURL.String())
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	response := &Response{
+		StatusCode: resp.StatusCode,
+		Status:     resp.Status,
+		Headers:    resp.Header,
+		Body:       respBody,
+	}
+
+	if resp.StatusCode >= 400 {
+		return response, &Error{
+			Kind:       ErrKindHTTP,
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Body:       respBody,
+			Headers:    resp.Header,
+			Method:     method,
+			URL:        reqURL.String(),
+		}
+	}
+
+	if result != nil && len(respBody) > 0 {
+		if err := response.JSON(result); err != nil {
+			return response, err
+		}
+	}
+
+	return response, nil
+}
+
+func (c *Client) wrapError(err error, method, url string) error {
+	kind := ErrKindUnknown
+	if errors.Is(err, context.DeadlineExceeded) {
+		kind = ErrKindTimeout
+	} else if errors.Is(err, context.Canceled) {
+		kind = ErrKindNetwork
+	}
+
+	return &Error{
+		Kind:   kind,
+		Method: method,
+		URL:    url,
+		Err:    err,
 	}
 }
