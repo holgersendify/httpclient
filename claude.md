@@ -397,4 +397,26 @@ func TestReplayFailure(t *testing.T) {
 ## Git Conventions
 
 - Do not include Co-Authored-By or author attribution in commits
-- Keep commit messages concise and focused on the "why"
+- Commit small diffs often - prefer incremental commits over large changes
+- Never commit without explicit user approval
+- Use conventional commit format: `type(scope): description`
+
+### Commit Types
+
+| Type | Usage |
+|------|-------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `refactor` | Code change that neither fixes a bug nor adds a feature |
+| `test` | Adding or updating tests |
+| `docs` | Documentation only |
+| `chore` | Maintenance tasks |
+
+### Examples
+
+```
+feat(client): add retry policy support
+fix(auth): handle token refresh race condition
+refactor(middleware): simplify chain execution
+test(retry): add property-based tests for backoff
+```
