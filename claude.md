@@ -194,6 +194,20 @@ if err != nil {
 
 ## Testing Requirements
 
+### Test-Driven Development (TDD)
+
+**All code must be written using TDD.** Follow the red-green-refactor cycle:
+
+1. **Red**: Write a failing test first that defines the expected behavior
+2. **Green**: Write the minimum code to make the test pass
+3. **Refactor**: Clean up the code while keeping tests green
+
+Rules:
+- Never write implementation code without a failing test first
+- Each test should test one specific behavior
+- Tests must fail for the right reason before implementing
+- Commit the failing test, then commit the implementation separately
+
 ### Required Packages
 
 - `github.com/stretchr/testify/assert` - Assertions that report failure but continue
