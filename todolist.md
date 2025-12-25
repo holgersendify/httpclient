@@ -3,25 +3,25 @@
 Based on `spec.md` and `claude.md`. Files are created only when needed.
 
 ## Phase 1: Core Client & Configuration
-- [ ] Create `client.go` with Client struct, New(), and ClientOption
-- [ ] Implement configuration options: WithBaseURL, WithHTTPClient, WithTimeout, WithHeader/WithHeaders, WithUserAgent, WithDefaultContentType
-- [ ] Add tests for client creation and options
+- [x] Create `client.go` with Client struct, New(), and ClientOption
+- [x] Implement configuration options: WithBaseURL, WithHTTPClient, WithTimeout, WithHeader/WithHeaders, WithUserAgent, WithDefaultContentType
+- [x] Add tests for client creation and options
 
 ## Phase 2: Error Handling
-- [ ] Create `error.go` with Error struct and ErrorKind
-- [ ] Implement error classification helpers (IsTimeout, IsNetwork, IsRetryable, IsClientError, IsServerError, IsStatus)
-- [ ] Add tests for error types
+- [x] Create `error.go` with Error struct and ErrorKind
+- [x] Implement error classification helpers (IsTimeout, IsNetwork, IsRetryable, IsClientError, IsServerError, IsStatus)
+- [x] Add tests for error types
 
 ## Phase 3: Response Handling
-- [ ] Create `response.go` with Response struct
-- [ ] Implement Response methods (JSON, XML, String, status checks)
-- [ ] Add tests for response parsing
+- [x] Create `response.go` with Response struct
+- [x] Implement Response methods (JSON, XML, String, status checks)
+- [x] Add tests for response parsing
 
 ## Phase 4: Request Execution
-- [ ] Implement verb methods in client.go (Get, Post, Put, Patch, Delete)
-- [ ] Create `internal/body.go` for body serialization
-- [ ] Implement automatic response deserialization
-- [ ] Add integration tests with httptest.Server
+- [x] Implement verb methods in client.go (Get, Post, Put, Patch, Delete)
+- [x] Create `internal/body.go` for body serialization
+- [x] Implement automatic response deserialization
+- [x] Add integration tests with httptest.Server
 
 ## Phase 5: Request Builder
 - [ ] Create `request.go` with RequestBuilder for complex requests
