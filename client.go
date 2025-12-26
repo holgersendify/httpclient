@@ -21,7 +21,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/holgersendify/httpclient/httpclient/internal"
+	"github.com/holgersendify/httpclient/internal"
 )
 
 // Version is the current version of the httpclient package.
