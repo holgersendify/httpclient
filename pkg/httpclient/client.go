@@ -20,7 +20,7 @@ import (
 	"net/url"
 	"time"
 
-	"sendify/httpclient/internal"
+	"sendify/httpclient/pkg/httpclient/internal"
 )
 
 // Version is the current version of the httpclient package.
