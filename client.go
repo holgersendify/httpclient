@@ -14,14 +14,14 @@ package httpclient
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
-
-	"github.com/holgersendify/httpclient/internal"
 )
 
 // Version is the current version of the httpclient package.
@@ -284,7 +284,7 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 	} else if IsSOAPBody(body) {
 		bodyReader, contentType, extraHeaders, err = EncodeSOAPBody(body)
 	} else {
-		bodyReader, contentType, err = internal.EncodeBody(body)
+		bodyReader, contentType, err = encodeBody(body)
 	}
 	if err != nil {
 		return nil, err
@@ -531,4 +531,28 @@ func (c *Client) logRequest(ctx context.Context, method, url string, reqContentT
 	}
 
 	c.logger.Log(ctx, level, "http_request", attrs...)
+}
+
+// encodeBody encodes the given body into an io.Reader and returns the content type.
+func encodeBody(body any) (io.Reader, string, error) {
+	if body == nil {
+		return nil, "", nil
+	}
+
+	switch v := body.(type) {
+	case []byte:
+		return bytes.NewReader(v), "", nil
+	case string:
+		return strings.NewReader(v), "", nil
+	case io.Reader:
+		return v, "", nil
+	case url.Values:
+		return strings.NewReader(v.Encode()), "application/x-www-form-urlencoded", nil
+	default:
+		data, err := json.Marshal(v)
+		if err != nil {
+			return nil, "", err
+		}
+		return bytes.NewReader(data), "application/json", nil
+	}
 }
