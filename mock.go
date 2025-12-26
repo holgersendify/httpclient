@@ -13,6 +13,7 @@ import (
 type MockHandler func(req *http.Request) (*http.Response, error)
 
 // MockTransport implements http.RoundTripper for testing.
+// It is safe for concurrent use across goroutines.
 type MockTransport struct {
 	mu           sync.RWMutex
 	handlers     map[string]MockHandler

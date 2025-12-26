@@ -7,6 +7,7 @@ import (
 )
 
 // RateLimiter implements a token bucket rate limiter.
+// It is safe for concurrent use across goroutines.
 type RateLimiter struct {
 	tokens     float64
 	maxTokens  float64

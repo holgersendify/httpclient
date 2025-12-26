@@ -1,4 +1,14 @@
 // Package httpclient provides a production-grade HTTP client for Go.
+//
+// # Thread Safety
+//
+// The following types are safe for concurrent use:
+//   - Client: Immutable after creation, all methods are goroutine-safe
+//   - RateLimiter: Uses internal mutex for thread-safe token bucket
+//   - MockTransport: Uses internal mutex for thread-safe request recording
+//
+// The Response type is NOT safe for concurrent use - each goroutine should
+// have its own Response instance.
 package httpclient
 
 import (

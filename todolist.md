@@ -70,7 +70,7 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add long-running stability tests
 
 ## Phase 13: Quality Assurance
-- [ ] Run all linters (go vet, staticcheck, golangci-lint)
-- [ ] Verify zero warnings
-- [ ] Run tests with -race flag
-- [ ] Document thread safety guarantees
+- [x] Run all linters (go vet, staticcheck, golangci-lint)
+- [x] Verify zero warnings
+- [x] Run tests with -race flag
+- [x] Document thread safety guarantees
