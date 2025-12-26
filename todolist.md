@@ -47,10 +47,10 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add tests for middleware
 
 ## Phase 9: Authentication
-- [ ] Create `auth.go` with AuthProvider interface
-- [ ] Implement built-in providers (APIKey, Bearer, Basic, AuthFunc)
-- [ ] Implement TokenSource for refreshable tokens
-- [ ] Add tests for auth providers
+- [x] Create `auth.go` with AuthProvider interface
+- [x] Implement built-in providers (APIKey, Bearer, Basic, AuthFunc)
+- [x] Implement TokenSource for refreshable tokens
+- [x] Add tests for auth providers
 
 ## Phase 10: XML & SOAP
 - [ ] Create `xml.go` with XMLBody wrapper

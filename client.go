@@ -27,6 +27,7 @@ type Client struct {
 	retryPolicy        *RetryPolicy
 	rateLimiter        *RateLimiter
 	middlewares        []Middleware
+	authProvider       AuthProvider
 }
 
 // ClientOption configures a Client.
@@ -165,6 +166,17 @@ func WithMiddleware(mw Middleware) ClientOption {
 	}
 }
 
+// WithAuth sets the authentication provider for all requests.
+func WithAuth(auth AuthProvider) ClientOption {
+	return func(c *Client) error {
+		if auth == nil {
+			return errors.New("auth provider cannot be nil")
+		}
+		c.authProvider = auth
+		return nil
+	}
+}
+
 // Get performs an HTTP GET request.
 func (c *Client) Get(ctx context.Context, path string, result any, opts ...RequestOption) (*Response, error) {
 	return c.doWithOptions(ctx, http.MethodGet, path, nil, result, opts)
@@ -278,6 +290,18 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 			req.Header.Set("Content-Type", contentType)
 		} else if body != nil {
 			req.Header.Set("Content-Type", c.defaultContentType)
+		}
+
+		// Apply authentication
+		if c.authProvider != nil {
+			if err := c.authProvider.Apply(req); err != nil {
+				return nil, &Error{
+					Kind:   ErrKindUnknown,
+					Method: method,
+					URL:    reqURL.String(),
+					Err:    err,
+				}
+			}
 		}
 
 		// Build middleware chain
