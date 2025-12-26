@@ -40,11 +40,11 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add tests for rate limiting
 
 ## Phase 8: Middleware
-- [ ] Create `middleware.go` with Middleware type
-- [ ] Implement middleware chain execution
-- [ ] Implement RequestIDMiddleware
-- [ ] Add logging middleware with header redaction
-- [ ] Add tests for middleware
+- [x] Create `middleware.go` with Middleware type
+- [x] Implement middleware chain execution
+- [x] Implement RequestIDMiddleware
+- [x] Add logging middleware with header redaction
+- [x] Add tests for middleware
 
 ## Phase 9: Authentication
 - [ ] Create `auth.go` with AuthProvider interface

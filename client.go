@@ -26,6 +26,7 @@ type Client struct {
 	defaultContentType string
 	retryPolicy        *RetryPolicy
 	rateLimiter        *RateLimiter
+	middlewares        []Middleware
 }
 
 // ClientOption configures a Client.
@@ -153,6 +154,17 @@ func WithRateLimit(requests int, duration time.Duration) ClientOption {
 	}
 }
 
+// WithMiddleware adds a middleware to the client's middleware chain.
+func WithMiddleware(mw Middleware) ClientOption {
+	return func(c *Client) error {
+		if mw == nil {
+			return errors.New("middleware cannot be nil")
+		}
+		c.middlewares = append(c.middlewares, mw)
+		return nil
+	}
+}
+
 // Get performs an HTTP GET request.
 func (c *Client) Get(ctx context.Context, path string, result any, opts ...RequestOption) (*Response, error) {
 	return c.doWithOptions(ctx, http.MethodGet, path, nil, result, opts)
@@ -268,7 +280,21 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 			req.Header.Set("Content-Type", c.defaultContentType)
 		}
 
-		resp, err := c.httpClient.Do(req)
+		// Build middleware chain
+		transport := func(r *http.Request) (*http.Response, error) {
+			return c.httpClient.Do(r)
+		}
+
+		// Wrap transport with middlewares (in reverse order so first added executes first)
+		for i := len(c.middlewares) - 1; i >= 0; i-- {
+			mw := c.middlewares[i]
+			next := transport
+			transport = func(r *http.Request) (*http.Response, error) {
+				return mw(r, next)
+			}
+		}
+
+		resp, err := transport(req)
 		if err != nil {
 			lastErr = c.wrapError(err, method, reqURL.String())
 			// Network errors are retryable
