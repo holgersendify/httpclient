@@ -1,4 +1,4 @@
-module sendify/httpclient
+module sendify
 
 go 1.25.1
 
