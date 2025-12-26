@@ -221,7 +221,18 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 	}
 
 	// Encode body once for potential replay
-	bodyReader, contentType, err := internal.EncodeBody(body)
+	var bodyReader io.Reader
+	var contentType string
+	var extraHeaders map[string]string
+	var err error
+
+	if IsXMLBody(body) {
+		bodyReader, contentType, err = EncodeXMLBody(body)
+	} else if IsSOAPBody(body) {
+		bodyReader, contentType, extraHeaders, err = EncodeSOAPBody(body)
+	} else {
+		bodyReader, contentType, err = internal.EncodeBody(body)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -290,6 +301,11 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 			req.Header.Set("Content-Type", contentType)
 		} else if body != nil {
 			req.Header.Set("Content-Type", c.defaultContentType)
+		}
+
+		// Apply extra headers from body encoding (e.g., SOAPAction)
+		for key, value := range extraHeaders {
+			req.Header.Set(key, value)
 		}
 
 		// Apply authentication

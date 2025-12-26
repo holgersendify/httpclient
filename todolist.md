@@ -53,10 +53,10 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add tests for auth providers
 
 ## Phase 10: XML & SOAP
-- [ ] Create `xml.go` with XMLBody wrapper
-- [ ] Create `soap.go` with SOAP envelope handling
-- [ ] Implement SOAP fault detection
-- [ ] Add tests for XML/SOAP
+- [x] Create `xml.go` with XMLBody wrapper
+- [x] Create `soap.go` with SOAP envelope handling
+- [x] Implement SOAP fault detection
+- [x] Add tests for XML/SOAP
 
 ## Phase 11: Testing Utilities
 - [ ] Create `mock.go` with mock client and handlers
