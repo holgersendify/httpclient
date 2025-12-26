@@ -59,9 +59,9 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add tests for XML/SOAP
 
 ## Phase 11: Testing Utilities
-- [ ] Create `mock.go` with mock client and handlers
-- [ ] Implement request recording and assertions
-- [ ] Add tests for mock utilities
+- [x] Create `mock.go` with mock client and handlers
+- [x] Implement request recording and assertions
+- [x] Add tests for mock utilities
 
 ## Phase 12: Fuzz & Chaos Testing
 - [ ] Add fuzz tests for parsing functions
