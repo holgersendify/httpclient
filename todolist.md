@@ -24,9 +24,9 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add integration tests with httptest.Server
 
 ## Phase 5: Request Builder
-- [ ] Create `request.go` with RequestBuilder for complex requests
-- [ ] Implement RequestOption type and per-request options
-- [ ] Add tests for request building
+- [x] Create `request.go` with RequestBuilder for complex requests
+- [x] Implement RequestOption type and per-request options
+- [x] Add tests for request building
 
 ## Phase 6: Retry & Backoff
 - [ ] Create `retry.go` with RetryPolicy and backoff calculation

@@ -135,36 +135,57 @@ func WithDefaultContentType(contentType string) ClientOption {
 }
 
 // Get performs an HTTP GET request.
-func (c *Client) Get(ctx context.Context, path string, result any) (*Response, error) {
-	return c.do(ctx, http.MethodGet, path, nil, result)
+func (c *Client) Get(ctx context.Context, path string, result any, opts ...RequestOption) (*Response, error) {
+	return c.doWithOptions(ctx, http.MethodGet, path, nil, result, opts)
 }
 
 // Post performs an HTTP POST request.
-func (c *Client) Post(ctx context.Context, path string, body any, result any) (*Response, error) {
-	return c.do(ctx, http.MethodPost, path, body, result)
+func (c *Client) Post(ctx context.Context, path string, body any, result any, opts ...RequestOption) (*Response, error) {
+	return c.doWithOptions(ctx, http.MethodPost, path, body, result, opts)
 }
 
 // Put performs an HTTP PUT request.
-func (c *Client) Put(ctx context.Context, path string, body any, result any) (*Response, error) {
-	return c.do(ctx, http.MethodPut, path, body, result)
+func (c *Client) Put(ctx context.Context, path string, body any, result any, opts ...RequestOption) (*Response, error) {
+	return c.doWithOptions(ctx, http.MethodPut, path, body, result, opts)
 }
 
 // Patch performs an HTTP PATCH request.
-func (c *Client) Patch(ctx context.Context, path string, body any, result any) (*Response, error) {
-	return c.do(ctx, http.MethodPatch, path, body, result)
+func (c *Client) Patch(ctx context.Context, path string, body any, result any, opts ...RequestOption) (*Response, error) {
+	return c.doWithOptions(ctx, http.MethodPatch, path, body, result, opts)
 }
 
 // Delete performs an HTTP DELETE request.
-func (c *Client) Delete(ctx context.Context, path string, result any) (*Response, error) {
-	return c.do(ctx, http.MethodDelete, path, nil, result)
+func (c *Client) Delete(ctx context.Context, path string, result any, opts ...RequestOption) (*Response, error) {
+	return c.doWithOptions(ctx, http.MethodDelete, path, nil, result, opts)
 }
 
-func (c *Client) do(ctx context.Context, method, path string, body any, result any) (*Response, error) {
+func (c *Client) doWithOptions(ctx context.Context, method, path string, body any, result any, opts []RequestOption) (*Response, error) {
+	cfg := newRequestConfig()
+	for _, opt := range opts {
+		opt(cfg)
+	}
+
 	reqURL := c.baseURL.JoinPath(path)
+
+	if len(cfg.query) > 0 {
+		q := reqURL.Query()
+		for key, values := range cfg.query {
+			for _, value := range values {
+				q.Add(key, value)
+			}
+		}
+		reqURL.RawQuery = q.Encode()
+	}
 
 	bodyReader, contentType, err := internal.EncodeBody(body)
 	if err != nil {
 		return nil, err
+	}
+
+	if cfg.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, cfg.timeout)
+		defer cancel()
 	}
 
 	req, err := http.NewRequestWithContext(ctx, method, reqURL.String(), bodyReader)
@@ -178,7 +199,15 @@ func (c *Client) do(ctx context.Context, method, path string, body any, result a
 		}
 	}
 
-	if contentType != "" {
+	for key, values := range cfg.headers {
+		for _, value := range values {
+			req.Header.Set(key, value)
+		}
+	}
+
+	if cfg.contentType != "" {
+		req.Header.Set("Content-Type", cfg.contentType)
+	} else if contentType != "" {
 		req.Header.Set("Content-Type", contentType)
 	} else if body != nil {
 		req.Header.Set("Content-Type", c.defaultContentType)
