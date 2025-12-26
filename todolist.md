@@ -35,9 +35,9 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add tests for retry behavior
 
 ## Phase 7: Rate Limiting
-- [ ] Create `ratelimit.go` with token bucket RateLimiter
-- [ ] Integrate rate limiting into request flow
-- [ ] Add tests for rate limiting
+- [x] Create `ratelimit.go` with token bucket RateLimiter
+- [x] Integrate rate limiting into request flow
+- [x] Add tests for rate limiting
 
 ## Phase 8: Middleware
 - [ ] Create `middleware.go` with Middleware type

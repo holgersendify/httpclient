@@ -25,6 +25,7 @@ type Client struct {
 	headers            http.Header
 	defaultContentType string
 	retryPolicy        *RetryPolicy
+	rateLimiter        *RateLimiter
 }
 
 // ClientOption configures a Client.
@@ -144,6 +145,14 @@ func WithRetry(policy *RetryPolicy) ClientOption {
 	}
 }
 
+// WithRateLimit configures client-side rate limiting.
+func WithRateLimit(requests int, duration time.Duration) ClientOption {
+	return func(c *Client) error {
+		c.rateLimiter = NewRateLimiter(requests, duration)
+		return nil
+	}
+}
+
 // Get performs an HTTP GET request.
 func (c *Client) Get(ctx context.Context, path string, result any, opts ...RequestOption) (*Response, error) {
 	return c.doWithOptions(ctx, http.MethodGet, path, nil, result, opts)
@@ -198,6 +207,18 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 		bodyBytes, err = io.ReadAll(bodyReader)
 		if err != nil {
 			return nil, err
+		}
+	}
+
+	// Apply rate limiting
+	if c.rateLimiter != nil {
+		if err := c.rateLimiter.Wait(ctx); err != nil {
+			return nil, &Error{
+				Kind:   ErrKindRateLimit,
+				Method: method,
+				URL:    reqURL.String(),
+				Err:    err,
+			}
 		}
 	}
 
