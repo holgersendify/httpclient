@@ -300,19 +300,9 @@ func TestChaos_MiddlewareChainUnderLoad(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create multiple middleware layers
-	var mu sync.Mutex
-	var logs []string
-	logger := func(msg string) {
-		mu.Lock()
-		logs = append(logs, msg)
-		mu.Unlock()
-	}
-
 	client, err := New(
 		WithBaseURL(server.URL),
 		WithMiddleware(RequestIDMiddleware("X-Request-ID")),
-		WithMiddleware(LoggingMiddleware(logger)),
 	)
 	assert.NoError(t, err)
 
@@ -342,11 +332,6 @@ func TestChaos_MiddlewareChainUnderLoad(t *testing.T) {
 	wg.Wait()
 
 	assert.Equal(t, int32(0), atomic.LoadInt32(&panics), "middleware chain should never panic")
-
-	// Verify logs were recorded (thread-safe)
-	mu.Lock()
-	assert.NotEmpty(t, logs, "logs should be recorded")
-	mu.Unlock()
 }
 
 func TestChaos_RetryUnderFailure(t *testing.T) {

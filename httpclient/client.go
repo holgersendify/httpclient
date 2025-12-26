@@ -16,6 +16,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"time"
@@ -38,6 +39,10 @@ type Client struct {
 	rateLimiter        *RateLimiter
 	middlewares        []Middleware
 	authProvider       AuthProvider
+	logger             Logger
+	thirdPartyCode     string
+	logBodyConfig      LogBodyConfig
+	loggingDisabled    bool
 }
 
 // ClientOption configures a Client.
@@ -51,6 +56,7 @@ func New(opts ...ClientOption) (*Client, error) {
 		timeout:            30 * time.Second,
 		headers:            make(http.Header),
 		defaultContentType: "application/json",
+		logBodyConfig:      DefaultLogBodyConfig(),
 	}
 
 	c.headers.Set("User-Agent", "httpclient/"+Version)
@@ -64,6 +70,11 @@ func New(opts ...ClientOption) (*Client, error) {
 
 	if c.baseURL == nil {
 		return nil, errors.New("base URL is required: use WithBaseURL option")
+	}
+
+	// Enable logging by default unless explicitly disabled
+	if !c.loggingDisabled && c.logger == nil {
+		c.logger = newDefaultLogger()
 	}
 
 	return c, nil
@@ -187,6 +198,38 @@ func WithAuth(auth AuthProvider) ClientOption {
 	}
 }
 
+// WithLogger sets a custom logger for the client.
+func WithLogger(logger Logger) ClientOption {
+	return func(c *Client) error {
+		c.logger = logger
+		return nil
+	}
+}
+
+// WithThirdPartyCode sets the third party code used in logging.
+func WithThirdPartyCode(code string) ClientOption {
+	return func(c *Client) error {
+		c.thirdPartyCode = code
+		return nil
+	}
+}
+
+// WithLoggerDisabled disables logging for the client.
+func WithLoggerDisabled() ClientOption {
+	return func(c *Client) error {
+		c.loggingDisabled = true
+		return nil
+	}
+}
+
+// WithLogBodyConfig sets the body logging configuration.
+func WithLogBodyConfig(config LogBodyConfig) ClientOption {
+	return func(c *Client) error {
+		c.logBodyConfig = config
+		return nil
+	}
+}
+
 // Get performs an HTTP GET request.
 func (c *Client) Get(ctx context.Context, path string, result any, opts ...RequestOption) (*Response, error) {
 	return c.doWithOptions(ctx, http.MethodGet, path, nil, result, opts)
@@ -280,6 +323,8 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 
 	var response *Response
 	var lastErr error
+	startTime := time.Now()
+	var finalReqHeaders http.Header
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		// Create fresh body reader for each attempt
@@ -329,6 +374,9 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 				}
 			}
 		}
+
+		// Capture headers for logging (after auth, will be redacted)
+		finalReqHeaders = req.Header.Clone()
 
 		// Build middleware chain
 		transport := func(r *http.Request) (*http.Response, error) {
@@ -395,19 +443,23 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 				continue
 			}
 
+			c.logRequest(ctx, method, reqURL.String(), contentType, bodyBytes, finalReqHeaders, response, time.Since(startTime), lastErr)
 			return response, lastErr
 		}
 
 		// Success
 		if result != nil && len(respBody) > 0 {
 			if err := response.JSON(result); err != nil {
+				c.logRequest(ctx, method, reqURL.String(), contentType, bodyBytes, finalReqHeaders, response, time.Since(startTime), err)
 				return response, err
 			}
 		}
 
+		c.logRequest(ctx, method, reqURL.String(), contentType, bodyBytes, finalReqHeaders, response, time.Since(startTime), nil)
 		return response, nil
 	}
 
+	c.logRequest(ctx, method, reqURL.String(), contentType, bodyBytes, finalReqHeaders, response, time.Since(startTime), lastErr)
 	return response, lastErr
 }
 
@@ -435,4 +487,48 @@ func (c *Client) wrapError(err error, method, url string) error {
 		URL:    url,
 		Err:    err,
 	}
+}
+
+// logRequest logs a completed HTTP request.
+func (c *Client) logRequest(ctx context.Context, method, url string, reqContentType string, reqBody []byte, reqHeaders http.Header, resp *Response, duration time.Duration, err error) {
+	if c.logger == nil {
+		return
+	}
+
+	level := slog.LevelInfo
+	if err != nil || (resp != nil && resp.StatusCode >= 400) {
+		level = slog.LevelError
+	}
+
+	attrs := []slog.Attr{
+		slog.String("method", method),
+		slog.String("url", url),
+		slog.Int64("duration_ms", duration.Milliseconds()),
+	}
+
+	if c.thirdPartyCode != "" {
+		attrs = append(attrs, slog.String("third_party_code", c.thirdPartyCode))
+	}
+
+	// Add request headers (redacted)
+	attrs = append(attrs, slog.Any("request_headers", redactHeadersForLog(reqHeaders)))
+
+	// Add request body
+	if len(reqBody) > 0 {
+		attrs = append(attrs, slog.Any("request_body", formatBodyForLog(reqBody, reqContentType, c.logBodyConfig)))
+	}
+
+	if resp != nil {
+		attrs = append(attrs, slog.Int("status", resp.StatusCode))
+
+		// Add response body
+		respContentType := resp.Headers.Get("Content-Type")
+		attrs = append(attrs, slog.Any("response_body", formatBodyForLog(resp.Body, respContentType, c.logBodyConfig)))
+	}
+
+	if err != nil {
+		attrs = append(attrs, slog.String("error", err.Error()))
+	}
+
+	c.logger.Log(ctx, level, "http_request", attrs...)
 }

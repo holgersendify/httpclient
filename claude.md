@@ -192,6 +192,82 @@ if err != nil {
 
 ---
 
+## Logging
+
+Logging is **enabled by default** with a JSON slog logger.
+
+### Logger Interface
+
+```go
+// Logger defines the interface for structured logging.
+type Logger interface {
+    Log(ctx context.Context, level slog.Level, msg string, attrs ...slog.Attr)
+}
+```
+
+### Client Configuration
+
+```go
+client, err := httpclient.New(
+    httpclient.WithBaseURL("https://api.stripe.com"),
+    httpclient.WithThirdPartyCode("stripe"),  // identifies this integration in logs
+    // Logging is ON by default with slog JSON logger
+)
+
+// Or with custom logger
+client, err := httpclient.New(
+    httpclient.WithBaseURL("https://api.stripe.com"),
+    httpclient.WithThirdPartyCode("stripe"),
+    httpclient.WithLogger(myCustomLogger),
+)
+```
+
+### Body Logging (Option C)
+
+Request and response bodies are **always logged** with these rules:
+
+| Content | Behavior |
+|---------|----------|
+| Binary Content-Types (`image/*`, `video/*`, `application/octet-stream`, etc.) | `"[binary: 52KB]"` |
+| Total body > `MaxBodySize` (default 4KB) | `"[body: 52KB truncated]"` |
+| JSON string values > `MaxStringValue` (default 1KB) | `"[string: 2.1MB truncated]"` |
+| Everything else | Logged in full |
+
+```go
+// Configuration
+type LogBodyConfig struct {
+    MaxBodySize    int  // total body limit (default: 4KB)
+    MaxStringValue int  // max JSON string value (default: 1KB)
+}
+```
+
+### Log Output
+
+```json
+{
+  "time": "2024-01-15T10:30:00Z",
+  "level": "INFO",
+  "msg": "http_request",
+  "third_party_code": "stripe",
+  "method": "POST",
+  "url": "https://api.stripe.com/v1/charges",
+  "request_body": {"amount": 1000, "currency": "usd"},
+  "status": 200,
+  "response_body": {"id": "ch_123", "data": "[string: 2.1MB truncated]"},
+  "duration_ms": 142
+}
+```
+
+### Sensitive Header Redaction
+
+These headers are automatically redacted in logs:
+- `Authorization`
+- `X-API-Key`
+- `Cookie`
+- Headers containing: `*token*`, `*secret*`, `*password*`, `*key*`
+
+---
+
 ## Testing Requirements
 
 ### Test-Driven Development (TDD)
