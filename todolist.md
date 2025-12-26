@@ -64,10 +64,10 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add tests for mock utilities
 
 ## Phase 12: Fuzz & Chaos Testing
-- [ ] Add fuzz tests for parsing functions
-- [ ] Add property-based tests with rapid
-- [ ] Implement chaos testing with failure capture
-- [ ] Add long-running stability tests
+- [x] Add fuzz tests for parsing functions
+- [x] Add property-based tests with rapid
+- [x] Implement chaos testing with failure capture
+- [x] Add long-running stability tests
 
 ## Phase 13: Quality Assurance
 - [ ] Run all linters (go vet, staticcheck, golangci-lint)

@@ -69,14 +69,14 @@ func (p *RetryPolicy) ShouldRetry(statusCode int) bool {
 }
 
 // ParseRetryAfter parses the Retry-After header value.
-// Supports seconds format. Returns 0 if parsing fails.
+// Supports seconds format. Returns 0 if parsing fails or value is negative.
 func ParseRetryAfter(value string) time.Duration {
 	if value == "" {
 		return 0
 	}
 
 	seconds, err := strconv.Atoi(value)
-	if err != nil {
+	if err != nil || seconds < 0 {
 		return 0
 	}
 
