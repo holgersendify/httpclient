@@ -2,6 +2,7 @@
 package httpclient
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -23,6 +24,7 @@ type Client struct {
 	timeout            time.Duration
 	headers            http.Header
 	defaultContentType string
+	retryPolicy        *RetryPolicy
 }
 
 // ClientOption configures a Client.
@@ -134,6 +136,14 @@ func WithDefaultContentType(contentType string) ClientOption {
 	}
 }
 
+// WithRetry sets the retry policy.
+func WithRetry(policy *RetryPolicy) ClientOption {
+	return func(c *Client) error {
+		c.retryPolicy = policy
+		return nil
+	}
+}
+
 // Get performs an HTTP GET request.
 func (c *Client) Get(ctx context.Context, path string, result any, opts ...RequestOption) (*Response, error) {
 	return c.doWithOptions(ctx, http.MethodGet, path, nil, result, opts)
@@ -177,9 +187,18 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 		reqURL.RawQuery = q.Encode()
 	}
 
+	// Encode body once for potential replay
 	bodyReader, contentType, err := internal.EncodeBody(body)
 	if err != nil {
 		return nil, err
+	}
+
+	var bodyBytes []byte
+	if bodyReader != nil {
+		bodyBytes, err = io.ReadAll(bodyReader)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if cfg.timeout > 0 {
@@ -188,68 +207,121 @@ func (c *Client) doWithOptions(ctx context.Context, method, path string, body an
 		defer cancel()
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, reqURL.String(), bodyReader)
-	if err != nil {
-		return nil, err
+	maxAttempts := 1
+	if c.retryPolicy != nil {
+		maxAttempts = c.retryPolicy.MaxAttempts
 	}
 
-	for key, values := range c.headers {
-		for _, value := range values {
-			req.Header.Add(key, value)
+	var response *Response
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Create fresh body reader for each attempt
+		var reqBody io.Reader
+		if bodyBytes != nil {
+			reqBody = bytes.NewReader(bodyBytes)
 		}
-	}
 
-	for key, values := range cfg.headers {
-		for _, value := range values {
-			req.Header.Set(key, value)
+		req, err := http.NewRequestWithContext(ctx, method, reqURL.String(), reqBody)
+		if err != nil {
+			return nil, err
 		}
-	}
 
-	if cfg.contentType != "" {
-		req.Header.Set("Content-Type", cfg.contentType)
-	} else if contentType != "" {
-		req.Header.Set("Content-Type", contentType)
-	} else if body != nil {
-		req.Header.Set("Content-Type", c.defaultContentType)
-	}
+		for key, values := range c.headers {
+			for _, value := range values {
+				req.Header.Add(key, value)
+			}
+		}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, c.wrapError(err, method, reqURL.String())
-	}
-	defer resp.Body.Close()
+		for key, values := range cfg.headers {
+			for _, value := range values {
+				req.Header.Set(key, value)
+			}
+		}
 
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
+		if cfg.contentType != "" {
+			req.Header.Set("Content-Type", cfg.contentType)
+		} else if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
+		} else if body != nil {
+			req.Header.Set("Content-Type", c.defaultContentType)
+		}
 
-	response := &Response{
-		StatusCode: resp.StatusCode,
-		Status:     resp.Status,
-		Headers:    resp.Header,
-		Body:       respBody,
-	}
+		resp, err := c.httpClient.Do(req)
+		if err != nil {
+			lastErr = c.wrapError(err, method, reqURL.String())
+			// Network errors are retryable
+			if c.retryPolicy != nil && attempt < maxAttempts {
+				c.waitForRetry(ctx, c.retryPolicy.Backoff(attempt))
+				continue
+			}
+			return nil, lastErr
+		}
 
-	if resp.StatusCode >= 400 {
-		return response, &Error{
-			Kind:       ErrKindHTTP,
+		respBody, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+
+		response = &Response{
 			StatusCode: resp.StatusCode,
 			Status:     resp.Status,
-			Body:       respBody,
 			Headers:    resp.Header,
-			Method:     method,
-			URL:        reqURL.String(),
+			Body:       respBody,
 		}
+
+		if resp.StatusCode >= 400 {
+			lastErr = &Error{
+				Kind:       ErrKindHTTP,
+				StatusCode: resp.StatusCode,
+				Status:     resp.Status,
+				Body:       respBody,
+				Headers:    resp.Header,
+				Method:     method,
+				URL:        reqURL.String(),
+				Attempts:   attempt,
+			}
+
+			// Check if we should retry
+			if c.retryPolicy != nil && attempt < maxAttempts && c.retryPolicy.ShouldRetry(resp.StatusCode) {
+				delay := c.retryPolicy.Backoff(attempt)
+
+				// Check for Retry-After header
+				if retryAfter := resp.Header.Get("Retry-After"); retryAfter != "" {
+					if parsed := ParseRetryAfter(retryAfter); parsed > 0 {
+						delay = parsed
+					}
+				}
+
+				c.waitForRetry(ctx, delay)
+				continue
+			}
+
+			return response, lastErr
+		}
+
+		// Success
+		if result != nil && len(respBody) > 0 {
+			if err := response.JSON(result); err != nil {
+				return response, err
+			}
+		}
+
+		return response, nil
 	}
 
-	if result != nil && len(respBody) > 0 {
-		if err := response.JSON(result); err != nil {
-			return response, err
-		}
-	}
+	return response, lastErr
+}
 
-	return response, nil
+func (c *Client) waitForRetry(ctx context.Context, delay time.Duration) {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+	case <-timer.C:
+	}
 }
 
 func (c *Client) wrapError(err error, method, url string) error {

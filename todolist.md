@@ -29,10 +29,10 @@ Based on `spec.md` and `claude.md`. Files are created only when needed.
 - [x] Add tests for request building
 
 ## Phase 6: Retry & Backoff
-- [ ] Create `retry.go` with RetryPolicy and backoff calculation
-- [ ] Implement retry loop with body replay
-- [ ] Implement Retry-After header parsing
-- [ ] Add tests for retry behavior
+- [x] Create `retry.go` with RetryPolicy and backoff calculation
+- [x] Implement retry loop with body replay
+- [x] Implement Retry-After header parsing
+- [x] Add tests for retry behavior
 
 ## Phase 7: Rate Limiting
 - [ ] Create `ratelimit.go` with token bucket RateLimiter
